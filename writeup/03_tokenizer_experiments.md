@@ -3,7 +3,8 @@
 Environment: 8-core CPU, 44 GB RAM, no GPU. Python 3 with the `regex` package. Tokenizer
 implementation: `/notebooks/cs336_basics/tokenizer.py`; training implementation:
 `/notebooks/cs336_basics/train_bpe.py`. Trained artifacts:
-`/notebooks/data/tinystories/tokenizer.pkl` (vocab 10,000; special token `<|endoftext|>`).
+`/notebooks/data/tinystories/tokenizer.pkl` (vocab 10,000; special token `<|endoftext|>`) and
+`/notebooks/data/owt/tokenizer.pkl` (vocab 32,000; special token `<|endoftext|>`).
 
 ## Problem (train_bpe_tinystories): BPE Training on TinyStories (2 points)
 
@@ -58,6 +59,42 @@ expensive stage is regex pre-tokenization, and it is also the stage that paralle
 serial merge loop (dominated by re-scanning `pair_counts` for the max each iteration and
 updating affected words) is the residual cost that remains after parallelization.
 
+## Problem (train_bpe_expts_owt): BPE Training on OpenWebText (2 points)
+
+### (a) The longest token in the OWT vocabulary
+
+A byte-level BPE tokenizer was trained on the OpenWebText training set
+(`/notebooks/data/owt_train.txt`, 11.9 GB) with `vocab_size=32000` and the `<|endoftext|>`
+special token, and serialized to `/notebooks/data/owt/tokenizer.pkl` (32,000 vocab entries,
+31,743 merges). The longest tokens (by byte length):
+
+```
+len=64  b'\xc3\x83\xc3\x82' * 16          # "ÃÂ" repeated 16 times (mojibake)
+len=64  b'-' * 64                          # 64 hyphens
+len=48  b'\xe2\x80\x94' * 16               # em-dash "—" repeated 16 times
+len=32  b'-'*32, b'_'*32, b'='*32, b'.'*32, b'*'*32, and "ÃÂ"*8
+```
+
+The longest token is 64 bytes: a tie between `'ÃÂ'` repeated 16 times and a run of 64
+hyphens. This makes sense for scraped web text: `ÃÂ` is a classic UTF-8 double-encoding
+(mojibake) artifact that appears in long runs on badly-encoded pages, and hyphen/underscore/
+equals runs are ASCII separator lines — both recur verbatim thousands of times, so BPE keeps
+merging them into ever-longer tokens. (The longest *linguistic* tokens are 19 bytes:
+`b' disproportionately'`, `b' telecommunications'`.)
+
+### (b) TinyStories vs. OpenWebText tokenizer
+
+The TinyStories 10K vocabulary is dominated by whole common English words — its longest
+tokens are clean words like `b' accomplishment'` (15 bytes) — reflecting a small, simple,
+homogeneous GPT-4-generated vocabulary, while the OWT 32K vocabulary additionally captures
+web-specific structure: separator-line runs, mojibake artifacts, URL/code fragments, and a
+much larger inventory of rarer and longer words (e.g. `b' disproportionately'`) thanks to
+both the noisier domain and the 3.2x larger vocabulary budget. Consequently the OWT
+tokenizer compresses web text much better (4.38 vs 2.95 bytes/token on the OWT sample, see
+below) and even compresses TinyStories text almost as well as the in-domain tokenizer
+(3.94 vs 4.06 bytes/token), whereas the TinyStories tokenizer generalizes poorly outside
+its narrow domain.
+
 ## Problem (tokenizer_experiments): Experiments with tokenizers (4 points)
 
 Measurement script (excerpted; run with system `python3`, seed 42):
@@ -73,6 +110,10 @@ text = open("/notebooks/data/TinyStoriesV2-GPT4-valid.txt").read()
 docs = [d.strip() for d in text.split("<|endoftext|>") if d.strip()]
 random.seed(42)
 sample = random.sample(docs, 10)
+
+# OWT sampling: read only the first 8 MB of the 290 MB validation file,
+# split on <|endoftext|>, drop the trailing partial document (1,586 docs),
+# then random.sample(owt_docs, 10) with seed 42.
 total_bytes = sum(len(d.encode("utf-8")) for d in sample)
 total_tokens = sum(len(tok.encode(d)) for d in sample)
 print(total_bytes / total_tokens)  # compression ratio, bytes/token
@@ -85,7 +126,7 @@ t0 = time.perf_counter(); ids = tok.encode(bench); dt = time.perf_counter() - t0
 print(nb / dt)  # bytes/sec
 ```
 
-### (a) Compression ratio on 10 sampled TinyStories documents
+### (a) Compression ratio on 10 sampled TinyStories and OpenWebText documents
 
 Sampling 10 documents (seed 42) from the TinyStories validation set (27,630 documents) and
 encoding them with the 10K TinyStories tokenizer:
@@ -108,28 +149,52 @@ The TinyStories 10K tokenizer achieves a compression ratio of **~4.06 bytes/toke
 in-domain text (per-document range 3.88–4.44). All encodings round-trip exactly through
 `decode`.
 
-*(OWT part pending: the OpenWebText 32K tokenizer has not been trained yet — this row will be
-updated after `train_bpe_expts_owt` is completed.)*
+Sampling 10 documents (seed 42) from the first 8 MB of the OWT validation set (1,586
+documents) and encoding them with the 32K OWT tokenizer:
 
-### (b) Tokenizing out-of-domain text with the TinyStories tokenizer
+| doc | bytes | tokens | bytes/token |
+|----:|------:|-------:|------------:|
+| 1 | 2565 | 568 | 4.516 |
+| 2 | 2276 | 544 | 4.184 |
+| 3 | 8121 | 1733 | 4.686 |
+| 4 | 3371 | 827 | 4.076 |
+| 5 | 13097 | 2834 | 4.621 |
+| 6 | 3104 | 682 | 4.551 |
+| 7 | 26310 | 5596 | 4.702 |
+| 8 | 2172 | 493 | 4.406 |
+| 9 | 22852 | 5962 | 3.833 |
+| 10 | 3440 | 692 | 4.971 |
+| **total** | **87308** | **19931** | **4.381** |
 
-*(Proxy experiment: since the OWT tokenizer/sample is not available yet, we instead encode
-other-domain fixture texts with the TinyStories tokenizer; the OWT-sample comparison will be
-updated after the OWT tokenizer is trained.)*
+The OWT 32K tokenizer achieves **~4.38 bytes/token** on in-domain web text (per-document
+range 3.83–4.97) — slightly better than TinyStories' 4.06 despite the harder domain, because
+of its 3.2x larger vocabulary. All encodings round-trip exactly through `decode`. (For
+reference, the OWT tokenizer also encodes the TinyStories sample at 3.94 bytes/token —
+cross-domain, but nearly as good as the in-domain TinyStories tokenizer.)
 
-| text | domain | bytes | tokens | bytes/token |
-|------|--------|------:|-------:|------------:|
-| TinyStories sample (10 docs) | in-domain | 8457 | 2084 | **4.058** |
-| `tests/fixtures/address.txt` (Gettysburg Address) | formal 19th-c. English | 1468 | 374 | **3.925** |
-| `tests/fixtures/german.txt` (German Wikipedia) | German | 594 | 282 | **2.106** |
+### (b) Tokenizing the OWT sample with the TinyStories tokenizer
 
-Compression degrades as we leave the training domain: formal English still compresses
-reasonably (3.93 bytes/token, only ~3% worse, since the vocabulary covers common English
-words), but German text nearly halves the compression ratio to 2.11 bytes/token — the
-tokenizer falls back to short subword fragments and single characters, e.g. the first German
-tokens are `['D', 'ie', ' L', 'el', 'and', ' Stan', 'f', 'ord', ' J', 'un', 'i', 'or', ...]`.
-A tokenizer trained on one distribution encodes other distributions with many more, shorter
-tokens, which wastes sequence length at LM training time.
+Encoding the same 10 OWT documents with the TinyStories 10K tokenizer instead of the OWT
+32K tokenizer:
+
+| text | tokenizer | bytes | tokens | bytes/token |
+|------|-----------|------:|-------:|------------:|
+| OWT sample (10 docs) | OWT 32K (in-domain) | 87308 | 19931 | **4.381** |
+| OWT sample (10 docs) | TinyStories 10K | 87308 | 29604 | **2.949** |
+| TinyStories sample (10 docs) | TinyStories 10K (in-domain) | 8457 | 2084 | **4.058** |
+
+The compression ratio drops from 4.38 to **2.95 bytes/token** (per-document range 2.58–3.36),
+i.e. the same text costs **~49% more tokens** (29,604 vs 19,931). Qualitatively, the
+TinyStories tokenizer shatters web-domain vocabulary into short subword fragments — e.g. the
+first OWT document opens with `['B', 're', 'aking', ' Ne', 'w', 's', ' Em', 'ails', ...]`
+where the OWT tokenizer produces `['Breaking', ' News', ' Emails', ...]` — because words like
+"Breaking", "Emails", or "alerts" simply never appear in children's stories. A tokenizer
+trained on one distribution encodes other distributions with many more, shorter tokens,
+which wastes sequence length at LM training time.
+
+Supplementary fixture measurements with the TinyStories tokenizer show the same trend
+worsening with distance from the training domain: the Gettysburg Address (formal English)
+still gets 3.93 bytes/token, but German Wikipedia text collapses to 2.11 bytes/token.
 
 ### (c) Throughput and time to tokenize the Pile
 
@@ -146,7 +211,8 @@ warm-up so the pre-token cache is in its steady state, matching long-run behavio
 `uint16` represents integers 0–65,535, which covers every ID in a 10K (and a 32K, and even a
 64K) vocabulary, while using only 2 bytes per token — half of `int32` and a quarter of
 `int64`. For the 540.8 M-token TinyStories training encoding this is ~1.08 GB on disk
-(matching `/notebooks/data/tinystories/train.npy`) instead of ~4.3 GB as int64, and the
+(matching `/notebooks/data/tinystories/train.npy`), and for the 2.73 B-token OWT training
+encoding ~5.45 GB (matching `/notebooks/data/owt/train.npy`) instead of ~21.8 GB as int64; the
 smaller memory-mapped arrays also speed up data loading during LM training. A signed `int16`
 would not work (max 32,767 < 65,535 and wastes the sign bit), and `uint8` is too small
 (max 255), so `uint16` is the smallest dtype that safely holds the vocabulary.
