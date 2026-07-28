@@ -13,9 +13,11 @@ echo "BASE_FINISHED $(date +%H:%M)"
 run() {
   local name=$1; shift
   if [ -f "$RUNS/$name/final.pt" ]; then echo "SKIP $name (already done)"; return; fi
+  local resume=()
+  if [ -f "$RUNS/$name/latest.pt" ]; then resume=(--resume "$RUNS/$name/latest.pt"); echo "RESUME $name"; fi
   echo "START $name $(date +%H:%M)"
-  python3 -m cs336_basics.train --data-dir "$TS_DATA" --out-dir "$RUNS/$name" "$@" \
-    > "$RUNS/$name.log" 2>&1
+  python3 -m cs336_basics.train --data-dir "$TS_DATA" --out-dir "$RUNS/$name" "${resume[@]}" "$@" \
+    >> "$RUNS/$name.log" 2>&1
   local last_val
   last_val=$(grep val_loss "$RUNS/$name/log.jsonl" 2>/dev/null | tail -1)
   echo "DONE $name $(date +%H:%M) $last_val"
