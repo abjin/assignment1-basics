@@ -2,7 +2,7 @@
 
 ## Setup
 
-Generated with the base TinyStories model (17M non-embedding params, 20,000 steps,
+Generated with the base TinyStories model (22.7M params / 12.5M non-embedding, 20,000 steps,
 batch 64, context 256, final validation loss **1.374**) using the decoder in
 `cs336_basics/decoding.py` with `temperature=0.8`, `top_p=0.9`, prompt `"Once upon a time"`.
 
@@ -37,7 +37,7 @@ Two factors that strongly affect output quality:
    trade-off: at temperature 1.0 with no nucleus truncation the low-probability tail
    introduces incoherent words, while temperature 0.8 + top-p 0.9 prunes that tail and
    yields much more fluent text (temperature 0 instead becomes repetitive and dull).
-2. **Model capacity vs. domain and training length** — a 17M-parameter model trained for
+2. **Model capacity vs. domain and training length** — a 22.7M-parameter model trained for
    327M tokens is far past the point of fluent grammar on a simple, narrow-vocabulary
    domain like TinyStories, but the same budget on broader text (e.g., OpenWebText)
    yields much less coherent samples; validation loss (1.374 here) tracks this closely.

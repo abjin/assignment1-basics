@@ -179,7 +179,7 @@ FIGURES = [
     {
         "filename": "ablations",
         "title": "Architecture ablations on TinyStories",
-        "subtitle": "17M-parameter Transformer LM, 327M tokens, batch 64 x context 256, LR 1e-3 unless noted",
+        "subtitle": "22.7M-parameter Transformer LM (12.5M non-embedding), 327M tokens, batch 64 x context 256, LR 1e-3 unless noted",
         "series": [
             ("tinystories-base", "base (pre-norm, RoPE, SwiGLU)"),
             ("ablation-post-norm", "post-norm"),
@@ -211,6 +211,15 @@ FIGURES = [
             ("batch-32", "batch 32, LR 5e-4"),
         ],
         "x_tokens": True,
+    },
+    {
+        "filename": "owt_vs_tinystories",
+        "title": "OpenWebText vs TinyStories",
+        "subtitle": "identical architecture, token budget and hyperparameters; only the dataset and vocab size differ",
+        "series": [
+            ("tinystories-base", "TinyStories (vocab 10K)"),
+            ("owt-base", "OpenWebText (vocab 32K)"),
+        ],
     },
 ]
 

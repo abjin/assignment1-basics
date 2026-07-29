@@ -1,8 +1,8 @@
 # Experiment log — TinyStories ablations, LR sweep, batch size
 
-All runs use the same 17M-non-embedding-parameter Transformer LM
-(`vocab 10,000`, `context 256`, `d_model 512`, `d_ff 1344`, `4 layers`,
-`16 heads`, RoPE Θ=10,000, 22.7M total parameters including embeddings) on a
+All runs use the same Transformer LM — `vocab 10,000`, `context 256`,
+`d_model 512`, `d_ff 1344`, `4 layers`, `16 heads`, RoPE Θ=10,000, giving
+**12.5M non-embedding / 22.7M total parameters** — on a
 single RTX A6000, trained on 327,680,000 TinyStories tokens with AdamW
 (β=(0.9, 0.95), weight decay 0.1, grad-clip 1.0), a cosine schedule with 5%
 linear warmup, and `min_lr = 0.1 × max_lr`. Only the variable named in each
