@@ -43,9 +43,11 @@ run batch-256 --batch-size 256 --lr 2e-3
 echo "WAITING_FOR_OWT_DATA $(date +%H:%M)"
 while [ ! -f "$OWT_DATA/valid.npy" ]; do sleep 120; done
 if [ ! -f "$RUNS/owt-base/final.pt" ]; then
+  owt_resume=()
+  if [ -f "$RUNS/owt-base/latest.pt" ]; then owt_resume=(--resume "$RUNS/owt-base/latest.pt"); echo "RESUME owt-base"; fi
   echo "START owt-base $(date +%H:%M)"
   python3 -m cs336_basics.train --data-dir "$OWT_DATA" --out-dir "$RUNS/owt-base" \
-    --vocab-size 32000 > "$RUNS/owt-base.log" 2>&1
+    --vocab-size 32000 "${owt_resume[@]}" >> "$RUNS/owt-base.log" 2>&1
   echo "DONE owt-base $(date +%H:%M) $(grep val_loss "$RUNS/owt-base/log.jsonl" | tail -1)"
 fi
 
